@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agent:
+    name: Agent
+    uses: ./.github/workflows/ci-agent.yml
+
+  server:
+    name: Server
+    uses: ./.github/workflows/ci-server.yml
+
+  web:
+    name: Web
+    uses: ./.github/workflows/ci-web.yml
+
+  deployment:
+    name: Deployment
+    uses: ./.github/workflows/ci-deployment.yml

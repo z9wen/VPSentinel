@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Publish dated release
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tested commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Calculate release version
+        id: version
+        shell: bash
+        env:
+          TZ: Australia/Sydney
+          SOURCE_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+        run: |
+          release_date=$(date +'%Y.%m.%d')
+          release_tag="v${release_date}.${SOURCE_RUN_NUMBER}"
+          echo "date=$release_date" >> "$GITHUB_OUTPUT"
+          echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build Linux release binaries
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          version=${RELEASE_TAG#v}
+          build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+
+          for arch in amd64 arm64; do
+            agent_ldflags="-s -w -X github.com/z9wen/VPSentinel/agent/internal/version.Version=${version} -X github.com/z9wen/VPSentinel/agent/internal/version.Commit=${SOURCE_SHA} -X github.com/z9wen/VPSentinel/agent/internal/version.Date=${build_date}"
+            server_ldflags="-s -w -X github.com/z9wen/VPSentinel/server/internal/version.Version=${version} -X github.com/z9wen/VPSentinel/server/internal/version.Commit=${SOURCE_SHA} -X github.com/z9wen/VPSentinel/server/internal/version.Date=${build_date}"
+
+            (
+              cd agent
+              GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build \
+                -trimpath \
+                -ldflags="$agent_ldflags" \
+                -o "../dist/vpsentinel-agent-linux-${arch}" \
+                ./cmd/vpsentinel-agent
+            )
+            (
+              cd server
+              GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build \
+                -trimpath \
+                -ldflags="$server_ldflags" \
+                -o "../dist/vpsentinel-server-linux-${arch}" \
+                ./cmd/vpsentinel-server
+            )
+          done
+
+          sha256sum dist/vpsentinel-* > dist/checksums.txt
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_DATE: ${{ steps.version.outputs.date }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists."
+            exit 0
+          fi
+
+          gh release create "$RELEASE_TAG" \
+            dist/vpsentinel-agent-linux-amd64 \
+            dist/vpsentinel-agent-linux-arm64 \
+            dist/vpsentinel-server-linux-amd64 \
+            dist/vpsentinel-server-linux-arm64 \
+            dist/checksums.txt \
+            --target "$SOURCE_SHA" \
+            --title "VPSentinel ${RELEASE_DATE} (CI run ${SOURCE_RUN_NUMBER})" \
+            --generate-notes

@@ -1,0 +1,72 @@
+name: Server CI
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Format, vet, and unit test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          unformatted=$(gofmt -l server)
+          if [[ -n "$unformatted" ]]; then
+            echo "The following files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        working-directory: server
+        run: go vet ./...
+
+      - name: Run unit tests with race detector
+        working-directory: server
+        run: go test -race ./...
+
+  postgres:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: vpsentinel_test
+          POSTGRES_USER: vpsentinel
+          POSTGRES_PASSWORD: integration-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vpsentinel -d vpsentinel_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Run migration and idempotency integration test
+        working-directory: server
+        env:
+          VPSENTINEL_TEST_DATABASE_URL: postgres://vpsentinel:integration-test-password@127.0.0.1:5432/vpsentinel_test?sslmode=disable
+        run: go test -race -count=1 -run TestPostgresMigrationsAndIdempotentStore -v ./internal/database

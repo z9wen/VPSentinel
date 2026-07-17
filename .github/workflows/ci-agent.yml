@@ -1,0 +1,39 @@
+name: Agent CI
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Format, vet, and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          unformatted=$(gofmt -l agent protocol)
+          if [[ -n "$unformatted" ]]; then
+            echo "The following files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        working-directory: agent
+        run: go vet ./...
+
+      - name: Test with race detector
+        working-directory: agent
+        run: go test -race ./...

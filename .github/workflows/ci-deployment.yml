@@ -1,0 +1,24 @@
+name: Deployment CI
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Compose and image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Validate installation script
+        run: sh -n scripts/install-server.sh
+
+      - name: Validate Docker Compose
+        run: docker compose --env-file .env.example config --quiet
+
+      - name: Build Server image
+        run: docker build --file server/Dockerfile --tag vpsentinel-server:ci .
