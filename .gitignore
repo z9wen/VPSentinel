@@ -1,0 +1,51 @@
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Frontend dependencies and generated output
+node_modules/
+dist/
+dist-ssr/
+coverage/
+.vite/
+*.local
+
+# Go build and test output
+/go_build_*
+/vpsentinel-agent
+/vpsentinel-server
+/agent/vpsentinel-agent
+/server/vpsentinel-server
+*.test
+*.out
+coverage.out
+*.coverprofile
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Operating system files
+.DS_Store
+Thumbs.db

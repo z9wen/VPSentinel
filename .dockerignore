@@ -1,0 +1,8 @@
+.git
+.idea
+.env
+web/node_modules
+web/dist
+*.log
+vpsentinel-agent
+vpsentinel-server
