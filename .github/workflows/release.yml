@@ -38,11 +38,10 @@ jobs:
         shell: bash
         env:
           TZ: Australia/Sydney
-          SOURCE_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
         run: |
           release_date=$(date +'%Y.%m.%d')
-          release_tag="v${release_date}.${SOURCE_RUN_NUMBER}"
-          echo "date=$release_date" >> "$GITHUB_OUTPUT"
+          release_timestamp=$(date -u +'%s')
+          release_tag="v${release_date}.${release_timestamp}"
           echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
 
       - name: Build Linux release binaries
@@ -84,9 +83,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-          RELEASE_DATE: ${{ steps.version.outputs.date }}
           SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
-          SOURCE_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Release $RELEASE_TAG already exists."
@@ -100,5 +97,5 @@ jobs:
             dist/vpsentinel-server-linux-arm64 \
             dist/checksums.txt \
             --target "$SOURCE_SHA" \
-            --title "VPSentinel ${RELEASE_DATE} (CI run ${SOURCE_RUN_NUMBER})" \
+            --title "$RELEASE_TAG" \
             --generate-notes
