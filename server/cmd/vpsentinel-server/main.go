@@ -51,17 +51,32 @@ func run(logger *slog.Logger) error {
 	} else {
 		logger.Info("automatic database migrations disabled")
 	}
-	cancelDatabaseStartup()
-
 	gin.SetMode(cfg.GinMode)
 	store := database.NewPostgresStore(pool)
+	if err := store.EnsureAdmin(databaseCtx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+		cancelDatabaseStartup()
+		return err
+	}
+	if err := store.EnsureBootstrapToken(databaseCtx, cfg.NodeID, cfg.AgentToken); err != nil {
+		cancelDatabaseStartup()
+		return err
+	}
+	cancelDatabaseStartup()
+	sessions := auth.NewSessionManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	router := api.NewRouter(api.Dependencies{
-		Authenticator: auth.NewStatic(cfg.AgentToken, cfg.NodeID),
+		Authenticator: auth.NewPostgres(pool),
 		Store:         store,
+		Management:    store,
+		Sessions:      sessions,
 		Logger:        logger,
 		Version:       version.Version,
 		MaxBodyBytes:  cfg.MaxBodyBytes,
+		AllowedOrigin: cfg.WebOrigin,
+		CookieSecure:  cfg.CookieSecure,
+		WebhookSecret: cfg.GrafanaWebhookSecret,
+		GrafanaURL:    cfg.GrafanaURL,
 	})
+	go runRetention(ctx, store, logger, cfg.RetentionDays)
 
 	server := &http.Server{
 		Addr:              cfg.ListenAddress,
@@ -98,4 +113,33 @@ func run(logger *slog.Logger) error {
 	}
 	logger.Info("server shut down gracefully")
 	return nil
+}
+
+type retentionStore interface {
+	CleanupMetrics(context.Context, time.Time) (int64, error)
+}
+
+func runRetention(ctx context.Context, store retentionStore, logger *slog.Logger, retentionDays int) {
+	cleanup := func() {
+		before := time.Now().UTC().AddDate(0, 0, -retentionDays)
+		deleted, err := store.CleanupMetrics(ctx, before)
+		if err != nil {
+			if ctx.Err() == nil {
+				logger.Error("metric retention cleanup failed", "error", err)
+			}
+			return
+		}
+		logger.Info("metric retention cleanup completed", "deleted_samples", deleted, "retention_days", retentionDays)
+	}
+	cleanup()
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cleanup()
+		}
+	}
 }

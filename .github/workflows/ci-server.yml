@@ -65,8 +65,8 @@ jobs:
           go-version-file: go.work
           cache-dependency-path: "**/go.sum"
 
-      - name: Run migration and idempotency integration test
+      - name: Run PostgreSQL integration tests
         working-directory: server
         env:
           VPSENTINEL_TEST_DATABASE_URL: postgres://vpsentinel:integration-test-password@127.0.0.1:5432/vpsentinel_test?sslmode=disable
-        run: go test -race -count=1 -run TestPostgresMigrationsAndIdempotentStore -v ./internal/database
+        run: go test -race -count=1 -v ./internal/database

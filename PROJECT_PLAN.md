@@ -1,5 +1,22 @@
 # VPSentinel Development Plan
 
+## Implementation status (2026-07-25)
+
+The repository now implements the software portion of the v0.1 MVP: agent
+collection and retry behavior, PostgreSQL ingestion and management schema,
+per-node token lifecycle, dual-token admin authentication, node/metric/incident
+APIs, React operations UI, Grafana dashboards and alert provisioning, retention
+cleanup, hardened systemd installation, Docker Compose, Nginx TLS examples, CI,
+multi-architecture releases, and operator documentation.
+
+The remaining apply-ready items require a real environment and must not be
+claimed from repository code alone: operate two or more VPS agents for 24
+hours, connect an external operator notification destination, execute the four
+failure drills, record measured alert/recovery timings in a real postmortem,
+verify the public firewall/TLS deployment, and add sanitised screenshots.
+
+The original milestones below remain as the scope and acceptance record.
+
 ## 1. Project Summary
 
 VPSentinel is a lightweight, self-hosted monitoring and alerting platform for a small fleet of Linux VPS instances running websites, APIs, and self-hosted services.

@@ -36,3 +36,6 @@ local development server only, set `VPSENTINEL_ALLOW_INSECURE_HTTP=true`.
 The collector and sender run independently. Temporary server failures fill a
 bounded in-memory queue while host collection continues; successful responses
 acknowledge samples by their stable `sample_id`.
+
+For checksum-verified release installation, systemd hardening, upgrades, and
+credential rotation, see [the agent installation guide](../docs/agent-installation.md).

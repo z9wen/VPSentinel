@@ -21,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      source_sha: ${{ github.event.workflow_run.head_sha }}
     steps:
       - name: Check out tested commit
         uses: actions/checkout@v6
@@ -99,3 +102,16 @@ jobs:
             --target "$SOURCE_SHA" \
             --title "$RELEASE_TAG" \
             --generate-notes
+
+  publish-images:
+    name: Publish GitHub container images
+    needs: release
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/publish-images.yml
+    with:
+      release_tag: ${{ needs.release.outputs.tag }}
+      source_sha: ${{ needs.release.outputs.source_sha }}
+    secrets: inherit

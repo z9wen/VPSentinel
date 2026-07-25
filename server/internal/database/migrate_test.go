@@ -7,10 +7,12 @@ func TestEmbeddedMigrationsAreValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadMigrations: %v", err)
 	}
-	if len(migrations) != 1 {
-		t.Fatalf("migration count = %d, want 1", len(migrations))
+	if len(migrations) != 2 {
+		t.Fatalf("migration count = %d, want 2", len(migrations))
 	}
-	if migrations[0].version != "000001" || migrations[0].checksum == "" {
-		t.Fatalf("migration = %#v, want version 000001 with checksum", migrations[0])
+	for index, version := range []string{"000001", "000002"} {
+		if migrations[index].version != version || migrations[index].checksum == "" {
+			t.Fatalf("migration = %#v, want version %s with checksum", migrations[index], version)
+		}
 	}
 }

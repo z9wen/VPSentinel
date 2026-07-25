@@ -2,8 +2,8 @@ package queue
 
 import "github.com/z9wen/VPSentinel/protocol"
 
-// SampleQueue 是有上限的内存队列。满时丢弃最旧数据，避免服务端长期离线
-// 导致 agent 内存无限增长。
+// SampleQueue is a bounded in-memory buffer. Dropping the oldest sample at
+// capacity prevents an extended control-plane outage from exhausting memory.
 type SampleQueue struct {
 	capacity int
 	samples  []protocol.MetricSample
@@ -16,7 +16,7 @@ func New(capacity int) *SampleQueue {
 	return &SampleQueue{capacity: capacity, samples: make([]protocol.MetricSample, 0, capacity)}
 }
 
-// Push 返回是否丢弃了一个旧样本。
+// Push reports whether the oldest sample had to be dropped.
 func (q *SampleQueue) Push(sample protocol.MetricSample) bool {
 	dropped := len(q.samples) == q.capacity
 	if dropped {

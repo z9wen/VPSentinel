@@ -1,32 +1,24 @@
-# React + TypeScript + Vite
+# VPSentinel Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The operations UI is a React and TypeScript application built with Vite,
+Tailwind CSS, DaisyUI, Radix UI primitives, Lucide icons, TanStack Router, and
+TanStack Query.
 
-Currently, two official plugins are available:
+## Structure
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- `src/components/ui`: reusable buttons, dialogs, panels, status, and empty states.
+- `src/features`: fleet overview, node operations, and incident views.
+- `src/hooks`: admin session and fleet data orchestration.
+- `src/lib`: API client and display formatting.
+- `src/types.ts`: API response contracts shared by features.
 
-## React Compiler
+The access JWT is held only in React memory. On reload or expiry, the app calls
+the refresh endpoint using the HttpOnly cookie and retries the interrupted API
+request once. The refresh credential is never accessible to JavaScript.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm ci
+npm run dev
+npm run lint
+npm run build
 ```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.

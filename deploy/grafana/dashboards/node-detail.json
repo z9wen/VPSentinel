@@ -1,0 +1,28 @@
+{
+  "uid": "vpsentinel-node",
+  "title": "VPSentinel Node Detail",
+  "tags": ["vpsentinel", "node"],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "refresh": "15s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [{
+      "name": "node_id",
+      "label": "Node",
+      "type": "query",
+      "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"},
+      "query": "SELECT name AS __text, id AS __value FROM nodes ORDER BY name",
+      "refresh": 1
+    }]
+  },
+  "panels": [
+    {"id": 1, "type": "timeseries", "title": "CPU usage", "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0}, "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"}, "targets": [{"refId": "A", "format": "time_series", "rawQuery": true, "rawSql": "SELECT recorded_at AS time, cpu_percent AS value FROM metric_samples WHERE node_id = '$node_id' AND $__timeFilter(recorded_at) ORDER BY recorded_at"}], "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []}},
+    {"id": 2, "type": "timeseries", "title": "Memory usage", "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0}, "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"}, "targets": [{"refId": "A", "format": "time_series", "rawQuery": true, "rawSql": "SELECT recorded_at AS time, 100.0 * memory_used_bytes / NULLIF(memory_total_bytes, 0) AS value FROM metric_samples WHERE node_id = '$node_id' AND $__timeFilter(recorded_at) ORDER BY recorded_at"}], "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []}},
+    {"id": 3, "type": "timeseries", "title": "Disk usage", "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0}, "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"}, "targets": [{"refId": "A", "format": "time_series", "rawQuery": true, "rawSql": "SELECT recorded_at AS time, 100.0 * disk_used_bytes / NULLIF(disk_total_bytes, 0) AS value FROM metric_samples WHERE node_id = '$node_id' AND $__timeFilter(recorded_at) ORDER BY recorded_at"}], "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []}},
+    {"id": 4, "type": "timeseries", "title": "Load average", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}, "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"}, "targets": [{"refId": "A", "format": "time_series", "rawQuery": true, "rawSql": "SELECT recorded_at AS time, load_1, load_5, load_15 FROM metric_samples WHERE node_id = '$node_id' AND $__timeFilter(recorded_at) ORDER BY recorded_at"}]},
+    {"id": 5, "type": "timeseries", "title": "Network counters", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}, "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"}, "targets": [{"refId": "A", "format": "time_series", "rawQuery": true, "rawSql": "SELECT recorded_at AS time, network_rx_bytes AS received, network_tx_bytes AS transmitted FROM metric_samples WHERE node_id = '$node_id' AND $__timeFilter(recorded_at) ORDER BY recorded_at"}], "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []}},
+    {"id": 6, "type": "stat", "title": "Uptime", "gridPos": {"h": 4, "w": 12, "x": 0, "y": 16}, "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"}, "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT uptime_seconds AS value FROM metric_samples WHERE node_id = '$node_id' ORDER BY recorded_at DESC LIMIT 1"}], "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}},
+    {"id": 7, "type": "stat", "title": "Last seen", "gridPos": {"h": 4, "w": 12, "x": 12, "y": 16}, "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"}, "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT EXTRACT(EPOCH FROM (NOW() - last_seen_at)) AS value FROM nodes WHERE id = '$node_id'"}], "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []}}
+  ]
+}

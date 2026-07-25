@@ -16,7 +16,8 @@ import (
 	"github.com/z9wen/VPSentinel/protocol"
 )
 
-// Collector 隔离“采集指标”与“发送指标”。测试其他组件时可以替换成 fake。
+// Collector separates metric collection from delivery and can be replaced by
+// a fake when testing other agent components.
 type Collector interface {
 	Collect(context.Context) (protocol.MetricSample, error)
 }
@@ -38,7 +39,7 @@ func (c *HostCollector) Collect(ctx context.Context) (protocol.MetricSample, err
 		collectionErrors = append(collectionErrors, fmt.Errorf("collect %s: %w", name, err))
 	}
 
-	// 200ms 是 CPU 采样窗口。它是 context-aware 的，程序退出时不会无故阻塞。
+	// The 200ms CPU sampling window respects cancellation during shutdown.
 	cpuPercent, err := safeCall(func() ([]float64, error) {
 		return cpu.PercentWithContext(ctx, 200*time.Millisecond, false)
 	})

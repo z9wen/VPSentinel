@@ -1,122 +1,39 @@
 import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { Outlet } from '@tanstack/react-router'
+import { ConsoleShell } from './components/ConsoleShell'
+import { LoadingScreen } from './components/LoadingScreen'
+import { Login } from './components/Login'
+import { AddNodeDialog } from './features/nodes/AddNodeDialog'
+import { NodeDetailDialog } from './features/nodes/NodeDetailDialog'
+import { useFleet } from './hooks/useFleet'
+import { useSession } from './hooks/useSession'
+import { ConsoleContext, type ConsoleContextValue } from './hooks/useConsole'
+import type { Node } from './types'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const session = useSession()
+  const fleet = useFleet(session.authedRequest, session.state === 'authenticated')
+  const [showAddNode, setShowAddNode] = useState(false)
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null)
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+  if (session.state === 'loading') return <LoadingScreen />
+  if (session.state === 'anonymous') return <Login onAuthenticated={session.authenticate} />
 
-      <div className="ticks"></div>
+  const context: ConsoleContextValue = {
+    nodes: fleet.nodes,
+    alerts: fleet.alerts,
+    activeAlerts: fleet.activeAlerts,
+    authedRequest: session.authedRequest,
+    refresh: fleet.load,
+    selectNode: setSelectedNode,
+  }
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+  return <ConsoleContext.Provider value={context}><ConsoleShell nodeCount={fleet.nodes.length} incidentCount={fleet.activeAlerts.length} onRefresh={() => void fleet.load()} onAddNode={() => setShowAddNode(true)} onLogout={() => void session.logout()}>
+    {fleet.error && <div className="alert alert-error mb-5 text-sm"><span>{fleet.error}</span><button className="btn btn-ghost btn-xs" onClick={() => void fleet.load()}>Retry</button></div>}
+    {fleet.loading && fleet.nodes.length === 0 ? <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">{[1, 2, 3, 4].map((value) => <div className="skeleton h-36" key={value} />)}</div> : <Outlet />}
+    <AddNodeDialog open={showAddNode} authedRequest={session.authedRequest} onClose={() => setShowAddNode(false)} onCreated={fleet.load} />
+    <NodeDetailDialog node={selectedNode} authedRequest={session.authedRequest} onClose={() => setSelectedNode(null)} />
+  </ConsoleShell></ConsoleContext.Provider>
 }
 
 export default App

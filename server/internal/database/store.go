@@ -41,8 +41,8 @@ func (s *PostgresStore) StoreBatch(
 	latestSample := batch.Samples[len(batch.Samples)-1]
 	if _, err := transaction.Exec(ctx, `
 		INSERT INTO nodes (
-			id, hostname, agent_version, os_name, kernel_version, last_seen_at
-		) VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6)
+			id, name, hostname, agent_version, os_name, kernel_version, last_seen_at
+		) VALUES ($1, $2, $2, $3, NULLIF($4, ''), NULLIF($5, ''), $6)
 		ON CONFLICT (id) DO UPDATE SET
 			hostname = EXCLUDED.hostname,
 			agent_version = EXCLUDED.agent_version,

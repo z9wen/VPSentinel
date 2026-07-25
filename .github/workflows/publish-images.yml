@@ -1,0 +1,114 @@
+name: Publish container images
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: GitHub release tag used for the container image tag
+        required: true
+        type: string
+      source_sha:
+        description: Tested Git commit to build
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: GitHub release tag used for the container image tag
+        required: true
+        type: string
+      source_sha:
+        description: Tested Git commit to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  publish:
+    name: Build and publish ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: server
+            context: .
+            dockerfile: server/Dockerfile
+          - component: web
+            context: web
+            dockerfile: web/Dockerfile
+    steps:
+      - name: Check out tested commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+
+      - name: Prepare image metadata
+        id: image
+        shell: bash
+        env:
+          COMPONENT: ${{ matrix.component }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          repository=${GITHUB_REPOSITORY#*/}
+          repository=$(printf '%s' "$repository" | tr '[:upper:]' '[:lower:]')
+          version=${RELEASE_TAG#v}
+          short_sha=${SOURCE_SHA:0:7}
+          build_date=$(git show -s --format=%cI "$SOURCE_SHA")
+
+          echo "name=ghcr.io/${owner}/${repository}-${COMPONENT}" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate tags and labels
+        id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=${{ inputs.release_tag }}
+            type=raw,value=sha-${{ steps.image.outputs.short_sha }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ inputs.source_sha }}
+            org.opencontainers.image.version=${{ inputs.release_tag }}
+
+      - name: Build and push multi-platform image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.image.outputs.version }}
+            COMMIT=${{ inputs.source_sha }}
+            BUILD_DATE=${{ steps.image.outputs.build_date }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+          provenance: mode=max
+          sbom: true

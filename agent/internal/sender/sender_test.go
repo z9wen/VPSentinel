@@ -11,7 +11,7 @@ import (
 	"github.com/z9wen/VPSentinel/protocol"
 )
 
-// roundTripFunc 让普通函数实现 http.RoundTripper 接口，因此测试无需真的监听端口。
+// roundTripFunc lets tests replace HTTP transport without opening a real port.
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {

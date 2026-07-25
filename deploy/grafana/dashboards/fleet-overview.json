@@ -1,0 +1,62 @@
+{
+  "uid": "vpsentinel-fleet",
+  "title": "VPSentinel Fleet Overview",
+  "tags": ["vpsentinel", "fleet"],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total nodes",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"},
+      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS value FROM nodes"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixedColor", "fixedColor": "blue"}}, "overrides": []}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Online",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"},
+      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS value FROM nodes WHERE last_seen_at >= NOW() - INTERVAL '2 minutes'"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixedColor", "fixedColor": "green"}}, "overrides": []}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Offline",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"},
+      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS value FROM nodes WHERE last_seen_at IS NULL OR last_seen_at < NOW() - INTERVAL '5 minutes'"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "fixedColor", "fixedColor": "red"}}, "overrides": []}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Active incidents",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"},
+      "targets": [{"refId": "A", "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS value FROM (SELECT DISTINCT ON (fingerprint) state FROM alert_events ORDER BY fingerprint, received_at DESC) latest WHERE state = 'firing'"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Fleet state and latest metrics",
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 4},
+      "datasource": {"type": "postgres", "uid": "vpsentinel-postgres"},
+      "targets": [{
+        "refId": "A",
+        "format": "table",
+        "rawQuery": true,
+        "rawSql": "SELECT n.name, n.environment, n.hostname, CASE WHEN n.last_seen_at >= NOW() - INTERVAL '2 minutes' THEN 'online' WHEN n.last_seen_at >= NOW() - INTERVAL '5 minutes' THEN 'degraded' ELSE 'offline' END AS status, n.last_seen_at, ROUND(m.cpu_percent::numeric, 1) AS cpu_percent, ROUND((100.0 * m.memory_used_bytes / NULLIF(m.memory_total_bytes, 0))::numeric, 1) AS memory_percent, ROUND((100.0 * m.disk_used_bytes / NULLIF(m.disk_total_bytes, 0))::numeric, 1) AS disk_percent, n.agent_version FROM nodes n LEFT JOIN LATERAL (SELECT * FROM metric_samples WHERE node_id = n.id ORDER BY recorded_at DESC LIMIT 1) m ON TRUE ORDER BY n.name"
+      }],
+      "options": {"showHeader": true, "cellHeight": "sm"},
+      "fieldConfig": {"defaults": {}, "overrides": []}
+    }
+  ]
+}

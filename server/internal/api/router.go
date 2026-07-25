@@ -15,6 +15,7 @@ import (
 	"github.com/z9wen/VPSentinel/protocol"
 	"github.com/z9wen/VPSentinel/server/internal/auth"
 	"github.com/z9wen/VPSentinel/server/internal/ingest"
+	"github.com/z9wen/VPSentinel/server/internal/management"
 )
 
 type Dependencies struct {
@@ -24,6 +25,12 @@ type Dependencies struct {
 	Version       string
 	MaxBodyBytes  int64
 	Now           func() time.Time
+	Management    management.Store
+	Sessions      *auth.SessionManager
+	AllowedOrigin string
+	CookieSecure  bool
+	WebhookSecret string
+	GrafanaURL    string
 }
 
 func NewRouter(dependencies Dependencies) *gin.Engine {
@@ -45,7 +52,7 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 
 	router := gin.New()
 	_ = router.SetTrustedProxies(nil)
-	router.Use(gin.Recovery(), requestLogger(dependencies.Logger))
+	router.Use(gin.Recovery(), securityHeaders(), cors(dependencies.AllowedOrigin), newRateLimiter(240, time.Minute).middleware(), requestLogger(dependencies.Logger))
 
 	router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -62,7 +69,55 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 	})
 
 	router.POST("/api/v1/agent/metrics", dependencies.ingestMetrics)
+	if dependencies.Management != nil {
+		router.POST("/api/v1/agent/heartbeat", dependencies.agentHeartbeat)
+	}
+	if dependencies.Management != nil && dependencies.Sessions != nil {
+		router.POST("/api/v1/auth/login", dependencies.login)
+		router.POST("/api/v1/auth/refresh", dependencies.refresh)
+		router.POST("/api/v1/auth/logout", dependencies.logout)
+		router.POST("/api/v1/integrations/grafana/webhook", dependencies.grafanaWebhook)
+
+		admin := router.Group("/api/v1")
+		admin.Use(dependencies.requireAdmin())
+		admin.GET("/nodes", dependencies.listNodes)
+		admin.POST("/nodes", dependencies.createNode)
+		admin.GET("/nodes/:id", dependencies.getNode)
+		admin.DELETE("/nodes/:id", dependencies.deleteNode)
+		admin.POST("/nodes/:id/tokens", dependencies.createNodeToken)
+		admin.GET("/nodes/:id/tokens", dependencies.listNodeTokens)
+		admin.DELETE("/nodes/:id/tokens/:tokenId", dependencies.revokeNodeToken)
+		admin.GET("/nodes/:id/metrics/latest", dependencies.latestMetric)
+		admin.GET("/alerts", dependencies.listAlerts)
+		admin.GET("/alerts/:id", dependencies.getAlert)
+	}
 	return router
+}
+
+func securityHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("Referrer-Policy", "no-referrer")
+		c.Next()
+	}
+}
+
+func cors(origin string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if origin != "" && c.GetHeader("Origin") == origin {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Credentials", "true")
+			c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-VPSentinel-Webhook-Secret")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			c.Header("Vary", "Origin")
+		}
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
 }
 
 func (d Dependencies) ingestMetrics(c *gin.Context) {

@@ -1,0 +1,22 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: VPSentinel incidents
+    receivers:
+      - uid: vpsentinel-webhook
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          url: http://server:8080/api/v1/integrations/grafana/webhook
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: $VPSENTINEL_GRAFANA_WEBHOOK_SECRET
+
+policies:
+  - orgId: 1
+    receiver: VPSentinel incidents
+    group_by: [grafana_folder, alertname, node_id]
+    group_wait: 15s
+    group_interval: 1m
+    repeat_interval: 4h

@@ -9,7 +9,16 @@ WORKDIR /src/server
 RUN go mod download
 
 COPY server ./
-RUN go build -trimpath -ldflags="-s -w" -o /out/vpsentinel-server ./cmd/vpsentinel-server
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+RUN go build -trimpath \
+    -ldflags="-s -w \
+      -X github.com/z9wen/VPSentinel/server/internal/version.Version=${VERSION} \
+      -X github.com/z9wen/VPSentinel/server/internal/version.Commit=${COMMIT} \
+      -X github.com/z9wen/VPSentinel/server/internal/version.Date=${BUILD_DATE}" \
+    -o /out/vpsentinel-server \
+    ./cmd/vpsentinel-server
 
 FROM alpine:3.22
 

@@ -1,0 +1,132 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: VPSentinel availability
+    folder: VPSentinel
+    interval: 30s
+    rules:
+      - uid: vpsentinel-node-offline
+        title: Node offline
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: vpsentinel-postgres
+            relativeTimeRange: {from: 300, to: 0}
+            model:
+              datasource: {type: postgres, uid: vpsentinel-postgres}
+              editorMode: code
+              format: table
+              instant: true
+              rawQuery: true
+              rawSql: "SELECT id AS node_id, EXTRACT(EPOCH FROM (NOW() - last_seen_at)) AS value FROM nodes WHERE last_seen_at IS NOT NULL"
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model: {expression: A, reducer: last, type: reduce}
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model:
+              expression: B
+              type: threshold
+              conditions: [{evaluator: {params: [120], type: gt}, operator: {type: and}, query: {params: [C]}, reducer: {params: [], type: last}, type: query}]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Node {{ $labels.node_id }} has not reported for more than two minutes."
+        labels: {severity: critical}
+
+  - orgId: 1
+    name: VPSentinel resources
+    folder: VPSentinel
+    interval: 1m
+    rules:
+      - uid: vpsentinel-cpu-warning
+        title: High CPU usage
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: vpsentinel-postgres
+            relativeTimeRange: {from: 900, to: 0}
+            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (node_id) node_id, cpu_percent AS value FROM metric_samples WHERE recorded_at > NOW() - INTERVAL '15 minutes' ORDER BY node_id, recorded_at DESC"}
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model: {expression: A, reducer: last, type: reduce}
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model: {expression: B, type: threshold, conditions: [{evaluator: {params: [85], type: gt}, operator: {type: and}, query: {params: [C]}, reducer: {params: [], type: last}, type: query}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations: {summary: "CPU usage on {{ $labels.node_id }} has exceeded 85 percent for 10 minutes."}
+        labels: {severity: warning}
+
+      - uid: vpsentinel-memory-warning
+        title: High memory usage
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: vpsentinel-postgres
+            relativeTimeRange: {from: 900, to: 0}
+            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (node_id) node_id, 100.0 * memory_used_bytes / NULLIF(memory_total_bytes, 0) AS value FROM metric_samples WHERE recorded_at > NOW() - INTERVAL '15 minutes' ORDER BY node_id, recorded_at DESC"}
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model: {expression: A, reducer: last, type: reduce}
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model: {expression: B, type: threshold, conditions: [{evaluator: {params: [90], type: gt}, operator: {type: and}, query: {params: [C]}, reducer: {params: [], type: last}, type: query}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        annotations: {summary: "Memory usage on {{ $labels.node_id }} has exceeded 90 percent for 10 minutes."}
+        labels: {severity: warning}
+
+      - uid: vpsentinel-disk-warning
+        title: Disk usage warning
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: vpsentinel-postgres
+            relativeTimeRange: {from: 600, to: 0}
+            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (node_id) node_id, 100.0 * disk_used_bytes / NULLIF(disk_total_bytes, 0) AS value FROM metric_samples WHERE recorded_at > NOW() - INTERVAL '10 minutes' ORDER BY node_id, recorded_at DESC"}
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model: {expression: A, reducer: last, type: reduce}
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model: {expression: B, type: threshold, conditions: [{evaluator: {params: [80], type: gt}, operator: {type: and}, query: {params: [C]}, reducer: {params: [], type: last}, type: query}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations: {summary: "Disk usage on {{ $labels.node_id }} has exceeded 80 percent for five minutes."}
+        labels: {severity: warning}
+
+      - uid: vpsentinel-disk-critical
+        title: Disk usage critical
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: vpsentinel-postgres
+            relativeTimeRange: {from: 600, to: 0}
+            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (node_id) node_id, 100.0 * disk_used_bytes / NULLIF(disk_total_bytes, 0) AS value FROM metric_samples WHERE recorded_at > NOW() - INTERVAL '10 minutes' ORDER BY node_id, recorded_at DESC"}
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model: {expression: A, reducer: last, type: reduce}
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange: {from: 0, to: 0}
+            model: {expression: B, type: threshold, conditions: [{evaluator: {params: [90], type: gt}, operator: {type: and}, query: {params: [C]}, reducer: {params: [], type: last}, type: query}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations: {summary: "Disk usage on {{ $labels.node_id }} has exceeded 90 percent for five minutes."}
+        labels: {severity: critical}

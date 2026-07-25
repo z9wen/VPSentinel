@@ -33,7 +33,8 @@ func New(serverURL, token string, requestTimeout time.Duration) *Client {
 	}
 }
 
-// Send 会重试网络错误、429 和 5xx。认证或请求格式错误不会因重试而恢复。
+// Send retries network failures, rate limits, and server errors. Authentication
+// and validation errors are returned immediately because retries cannot fix them.
 func (c *Client) Send(ctx context.Context, batch protocol.MetricBatch) error {
 	body, err := json.Marshal(batch)
 	if err != nil {
@@ -76,8 +77,8 @@ func (c *Client) sendOnce(ctx context.Context, body []byte, agentVersion string)
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {
-		// 只有调用者的 context 已经结束时才停止。http.Client 自己的超时
-		// 属于临时网络故障，仍然值得重试。
+		// Stop only when the caller cancelled. A client timeout is treated as a
+		// temporary network failure and remains eligible for a bounded retry.
 		if ctx.Err() != nil {
 			return false, ctx.Err()
 		}
@@ -97,7 +98,8 @@ func (c *Client) sendOnce(ctx context.Context, body []byte, agentVersion string)
 }
 
 func (c *Client) backoff(attempt int) time.Duration {
-	// Full jitter: 随机等待 [0, base*2^attempt)，避免大量 agent 同时重试。
+	// Full jitter spreads retries across [0, base*2^attempt) so a recovering
+	// control plane is not hit by every agent at the same instant.
 	maximum := c.baseDelay * time.Duration(1<<attempt)
 	return time.Duration(rand.Int64N(int64(maximum)))
 }
