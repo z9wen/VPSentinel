@@ -1,0 +1,39 @@
+#!/bin/bash
+# Rendered by Terraform and run once by cloud-init on first boot. Waits for the
+# control plane to publish this node's token, then installs the released agent.
+set -euo pipefail
+exec > >(tee -a /var/log/vpsentinel-bootstrap.log) 2>&1
+echo "VPSentinel agent bootstrap started at $(date -u +%FT%TZ)"
+
+hostnamectl set-hostname '${node_name}'
+
+# The control plane publishes tokens once its stack is healthy, usually within
+# five minutes of apply. Read errors are retried because the instance role can
+# take a moment to become usable after boot.
+token=pending
+for attempt in $(seq 1 120); do
+  token=$(aws ssm get-parameter --region '${region}' --name '${token_parameter}' \
+    --with-decryption --query Parameter.Value --output text 2>/dev/null) || token=pending
+  if [ "$token" != pending ]; then
+    break
+  fi
+  echo "Waiting for agent token (attempt $attempt)"
+  sleep 10
+done
+if [ "$token" = pending ]; then
+  echo "The agent token was not published within 20 minutes." >&2
+  exit 1
+fi
+
+release_url='https://github.com/${repository}/releases/download/${release_tag}'
+cd /tmp
+curl -fsSL --retry 3 -O "$release_url/install-agent.sh" -O "$release_url/checksums.txt"
+grep '  install-agent.sh$' checksums.txt | sha256sum --check --quiet
+# Plain HTTP stays inside the VPC; the production path terminates TLS at Nginx.
+VPSENTINEL_VERSION='${release_tag}' \
+  VPSENTINEL_SERVER_URL='http://${control_plane_ip}:8080/api/v1/agent/metrics' \
+  VPSENTINEL_TOKEN="$token" \
+  VPSENTINEL_ALLOW_INSECURE_HTTP=true \
+  sh install-agent.sh
+
+echo "VPSentinel agent bootstrap finished at $(date -u +%FT%TZ)"

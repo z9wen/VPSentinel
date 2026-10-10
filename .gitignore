@@ -49,3 +49,11 @@ coverage.out
 # Operating system files
 .DS_Store
 Thumbs.db
+
+# Terraform: local state holds drill secrets and must never be committed
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log

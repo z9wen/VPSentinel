@@ -20,9 +20,14 @@ evaluates alerts, and a React control plane manages nodes and incidents.
   and firing/resolved webhooks stored as incident history.
 - Tailwind/DaisyUI React operations UI with fleet state, latest metrics, token
   operations, incident history, responsive states, and Grafana deep links.
-- Reproducible Docker Compose deployment, stable/LTS base images, Nginx TLS
-  example, hardened systemd agent, CI checks, multi-architecture binaries, and
-  provenance-attested container images published to GHCR.
+- Reproducible Docker Compose deployment with a one-shot migration job,
+  stable/LTS base images, Nginx TLS example, hardened systemd agent, CI checks,
+  multi-architecture binaries, and provenance-attested container images
+  published to GHCR.
+- Terraform drill environment on AWS: an isolated VPC with no inbound access,
+  Session Manager instead of SSH, IMDSv2, per-node IAM roles that can read only
+  their own SSM SecureString token, and a budget alert. CI validates and tests
+  the module against a mocked provider.
 
 ## Architecture
 
@@ -44,17 +49,19 @@ PostgreSQL, Grafana, and the API remain on an internal Compose network. See the
 Prerequisites: Docker Engine, Docker Compose v2, and OpenSSL.
 
 ```bash
-./scripts/install-server.sh
+./scripts/install-server.sh                                   # build from source
+VPSENTINEL_VERSION=vYYYY.MM.DD.TIMESTAMP ./scripts/install-server.sh   # release images
 ```
 
-The installer generates `.env` with mode `0600`, builds the stack, applies
-migrations, and waits for health checks. Open `http://127.0.0.1:8080` locally.
+The installer generates `.env` with mode `0600`, starts the stack, runs the
+migration job, and waits for health checks. Open `http://127.0.0.1:8080` locally.
 Before public use, configure the supplied [Nginx TLS proxy](deploy/nginx/vpsentinel.conf),
 set the public web origin, and enable secure cookies.
 
 Useful documentation:
 
-- [Server deployment](docs/deployment.md)
+- [Server deployment](docs/deployment.md), including a two-VPS reference setup
+- [Failure drills on a disposable AWS fleet](docs/drills.md)
 - [Agent installation and token rotation](docs/agent-installation.md)
 - [API and dual-token model](docs/api.md)
 - [Node-offline runbook](docs/runbooks/node-offline.md)
@@ -67,6 +74,7 @@ make test
 make lint
 make build
 make compose-config
+make terraform-check
 ```
 
 CI also starts PostgreSQL for migration and token-lifecycle integration tests,
@@ -84,9 +92,9 @@ docker pull ghcr.io/z9wen/vpsentinel-web:latest
 
 The software MVP is implemented, but repository code cannot prove a real
 deployment. Before using the project as a headline resume example, operate at
-least two real nodes for 24 hours, execute the failure drills in
-`PROJECT_PLAN.md`, replace the postmortem template with measured timestamps,
-and add screenshots with credentials and host identifiers removed.
+least two real nodes for 24 hours, execute the failure drills
+([runbook](docs/drills.md)), replace the postmortem template with measured
+timestamps, and add screenshots with credentials and host identifiers removed.
 
 ## Deliberate v0.1 limits
 

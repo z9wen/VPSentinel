@@ -14,18 +14,54 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Validate installation script
-        run: |
-          sh -n scripts/install-server.sh
-          sh -n scripts/install-agent.sh
+      - name: Lint installation scripts
+        run: shellcheck scripts/*.sh
 
       - name: Validate dashboard JSON
         run: jq empty deploy/grafana/dashboards/*.json
 
       - name: Validate Docker Compose
-        run: docker compose --env-file .env.example config --quiet
+        run: |
+          docker compose --env-file .env.example config --quiet
+          VPSENTINEL_VERSION=v0000.00.00.0 docker compose --env-file .env.example \
+            -f docker-compose.yml -f deploy/compose/release.yml config --quiet
 
       - name: Build application images
         run: |
           docker build --file server/Dockerfile --tag vpsentinel-server:ci .
           docker build --file web/Dockerfile --tag vpsentinel-web:ci web
+
+  terraform:
+    name: Validate Terraform drill module
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform/drill
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.2
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+
+      - name: Initialise without a backend
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Test with a mocked AWS provider
+        run: terraform test
+
+      - name: Lint rendered bootstrap scripts
+        run: |
+          render() { echo "$1" | terraform console | sed '1d;$d'; }
+          render 'templatefile("templates/control-plane.sh.tftpl", {region = "ap-southeast-1", repository = "z9wen/VPSentinel", release_tag = "v2026.01.01.1", parameter_prefix = "/ci", node_names = ["drill-1", "drill-2"], compose_version = "v0.0.0", compose_sha256 = "0"})' >"$RUNNER_TEMP/control-plane.sh"
+          render 'templatefile("templates/agent.sh.tftpl", {region = "ap-southeast-1", repository = "z9wen/VPSentinel", release_tag = "v2026.01.01.1", node_name = "drill-1", token_parameter = "/ci/agent-tokens/drill-1", control_plane_ip = "10.0.0.10"})' >"$RUNNER_TEMP/agent.sh"
+          shellcheck "$RUNNER_TEMP/control-plane.sh" "$RUNNER_TEMP/agent.sh"
