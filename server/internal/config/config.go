@@ -3,8 +3,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +44,16 @@ type Config struct {
 	GrafanaWebhookSecret string
 	GrafanaURL           string
 	RetentionDays        int
+	// TrustedProxies lists the reverse-proxy addresses (IPs or CIDRs) whose
+	// X-Real-IP header identifies the client. Empty trusts no proxy.
+	TrustedProxies []string
+}
+
+// MigrationConfig is the subset needed by the one-shot migrate command, so a
+// migration job does not need application secrets.
+type MigrationConfig struct {
+	DatabaseURL          string
+	DatabaseStartTimeout time.Duration
 }
 
 func Load() (Config, error) {
@@ -102,6 +114,7 @@ func load(getenv func(string) string) (Config, error) {
 		GrafanaWebhookSecret: getenv("VPSENTINEL_GRAFANA_WEBHOOK_SECRET"),
 		GrafanaURL:           valueOrDefault(getenv("VPSENTINEL_GRAFANA_URL"), "/grafana"),
 		RetentionDays:        retentionDays,
+		TrustedProxies:       listValue(getenv("VPSENTINEL_TRUSTED_PROXIES")),
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -154,7 +167,44 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("unsupported Gin mode %q", c.GinMode)
 	}
+	for _, proxy := range c.TrustedProxies {
+		if _, err := netip.ParsePrefix(proxy); err == nil {
+			continue
+		}
+		if _, err := netip.ParseAddr(proxy); err != nil {
+			return fmt.Errorf("VPSENTINEL_TRUSTED_PROXIES entry %q is not an IP address or CIDR", proxy)
+		}
+	}
 	return nil
+}
+
+func LoadMigration() (MigrationConfig, error) {
+	return loadMigration(os.Getenv)
+}
+
+func loadMigration(getenv func(string) string) (MigrationConfig, error) {
+	timeout, err := durationValue(getenv("VPSENTINEL_DATABASE_START_TIMEOUT"), defaultDatabaseStartTimeout)
+	if err != nil {
+		return MigrationConfig{}, fmt.Errorf("parse VPSENTINEL_DATABASE_START_TIMEOUT: %w", err)
+	}
+	cfg := MigrationConfig{DatabaseURL: getenv("VPSENTINEL_DATABASE_URL"), DatabaseStartTimeout: timeout}
+	if cfg.DatabaseURL == "" {
+		return MigrationConfig{}, errors.New("VPSENTINEL_DATABASE_URL is required")
+	}
+	if cfg.DatabaseStartTimeout <= 0 {
+		return MigrationConfig{}, errors.New("database start timeout must be greater than zero")
+	}
+	return cfg, nil
+}
+
+func listValue(value string) []string {
+	var items []string
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
 }
 
 func intValue(value string, fallback int) (int, error) {
