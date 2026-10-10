@@ -1,0 +1,70 @@
+#!/bin/bash
+# Rendered by Terraform and run once by cloud-init on first boot. Installs the
+# released VPSentinel stack, registers the drill nodes, and publishes their
+# tokens to SSM Parameter Store where each node's instance role can read its own.
+set -euo pipefail
+exec > >(tee -a /var/log/vpsentinel-bootstrap.log) 2>&1
+echo "VPSentinel control plane bootstrap started at $(date -u +%FT%TZ)"
+
+region='${region}'
+release_tag='${release_tag}'
+parameter_prefix='${parameter_prefix}'
+release_url='https://github.com/${repository}/releases/download/${release_tag}'
+
+hostnamectl set-hostname control-plane
+imds_token=$(curl -fsS -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 300')
+private_ip=$(curl -fsS -H "X-aws-ec2-metadata-token: $imds_token" http://169.254.169.254/latest/meta-data/local-ipv4)
+
+dnf install -y docker git jq openssl
+systemctl enable --now docker
+
+curl -fsSL --retry 3 -o /tmp/docker-compose \
+  'https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-linux-aarch64'
+echo '${compose_sha256}  /tmp/docker-compose' | sha256sum --check --quiet
+install -D -m 0755 /tmp/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
+rm -f /tmp/docker-compose
+
+git clone --quiet --depth 1 --branch "$release_tag" 'https://github.com/${repository}.git' /opt/vpsentinel
+cd /opt/vpsentinel
+# Bind the console to the private address so drill nodes can reach it; the
+# security group admits only the agent group, and operators use SSM tunnels.
+VPSENTINEL_VERSION="$release_tag" VPSENTINEL_BIND_ADDRESS="$private_ip" VPSENTINEL_HTTP_PORT=8080 \
+  ./scripts/install-server.sh
+
+env_value() {
+  grep "^$1=" /opt/vpsentinel/.env | cut -d= -f2-
+}
+
+put_secret() {
+  aws ssm put-parameter --region "$region" --name "$1" --type SecureString --overwrite --value "$2" >/dev/null
+}
+
+admin_password=$(env_value VPSENTINEL_ADMIN_PASSWORD)
+put_secret "$parameter_prefix/admin-password" "$admin_password"
+
+api="http://$private_ip:8080/api/v1"
+access_token=$(jq -n --arg password "$admin_password" '{email: "admin@example.com", password: $password}' |
+  curl -fsS -X POST "$api/auth/login" -H 'Content-Type: application/json' -d @- | jq -r .access_token)
+
+api_post() {
+  curl -fsS -X POST "$api/$1" -H "Authorization: Bearer $access_token" -H 'Content-Type: application/json' -d "$2"
+}
+
+%{ for node_name in node_names ~}
+node_id=$(api_post nodes "$(jq -n --arg name '${node_name}' '{name: $name, hostname: $name, environment: "drill"}')" | jq -r .id)
+token=$(api_post "nodes/$node_id/tokens" '{"label": "terraform-bootstrap"}' | jq -r .token)
+put_secret "$parameter_prefix/agent-tokens/${node_name}" "$token"
+echo "Registered ${node_name} as node $node_id"
+%{ endfor ~}
+
+# Monitor the control plane host as well, using the bootstrap node token.
+cd /tmp
+curl -fsSL --retry 3 -O "$release_url/install-agent.sh" -O "$release_url/checksums.txt"
+grep '  install-agent.sh$' checksums.txt | sha256sum --check --quiet
+VPSENTINEL_VERSION="$release_tag" \
+  VPSENTINEL_SERVER_URL="http://$private_ip:8080/api/v1/agent/metrics" \
+  VPSENTINEL_TOKEN="$(env_value VPSENTINEL_AGENT_TOKEN)" \
+  VPSENTINEL_ALLOW_INSECURE_HTTP=true \
+  sh install-agent.sh
+
+echo "VPSentinel control plane bootstrap finished at $(date -u +%FT%TZ)"
