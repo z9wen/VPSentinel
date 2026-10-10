@@ -19,7 +19,7 @@ groups:
               format: table
               instant: true
               rawQuery: true
-              rawSql: "SELECT id AS node_id, EXTRACT(EPOCH FROM (NOW() - last_seen_at)) AS value FROM nodes WHERE last_seen_at IS NOT NULL"
+              rawSql: "SELECT id AS node_id, name AS node_name, EXTRACT(EPOCH FROM (NOW() - last_seen_at)) AS value FROM nodes WHERE last_seen_at IS NOT NULL"
           - refId: B
             datasourceUid: __expr__
             relativeTimeRange: {from: 0, to: 0}
@@ -35,7 +35,8 @@ groups:
         execErrState: Error
         for: 0s
         annotations:
-          summary: "Node {{ $labels.node_id }} has not reported for more than two minutes."
+          summary: "{{ $labels.node_name }} has not reported for {{ with $values.B.Value }}{{ humanizeDuration . }}{{ else }}more than 2m{{ end }} (threshold 2m)."
+          runbook_url: https://github.com/z9wen/VPSentinel/blob/main/docs/runbooks/node-offline.md
         labels: {severity: critical}
 
   - orgId: 1
@@ -50,7 +51,7 @@ groups:
           - refId: A
             datasourceUid: vpsentinel-postgres
             relativeTimeRange: {from: 900, to: 0}
-            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (node_id) node_id, cpu_percent AS value FROM metric_samples WHERE recorded_at > NOW() - INTERVAL '15 minutes' ORDER BY node_id, recorded_at DESC"}
+            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (m.node_id) m.node_id, n.name AS node_name, m.cpu_percent AS value FROM metric_samples m JOIN nodes n ON n.id = m.node_id WHERE m.recorded_at > NOW() - INTERVAL '15 minutes' ORDER BY m.node_id, m.recorded_at DESC"}
           - refId: B
             datasourceUid: __expr__
             relativeTimeRange: {from: 0, to: 0}
@@ -62,7 +63,7 @@ groups:
         noDataState: OK
         execErrState: Error
         for: 10m
-        annotations: {summary: "CPU usage on {{ $labels.node_id }} has exceeded 85 percent for 10 minutes."}
+        annotations: {summary: "CPU usage on {{ $labels.node_name }} has stayed above 85% for 10 minutes{{ with $values.B.Value }} (now {{ humanize . }}%){{ end }}."}
         labels: {severity: warning}
 
       - uid: vpsentinel-memory-warning
@@ -72,7 +73,7 @@ groups:
           - refId: A
             datasourceUid: vpsentinel-postgres
             relativeTimeRange: {from: 900, to: 0}
-            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (node_id) node_id, 100.0 * memory_used_bytes / NULLIF(memory_total_bytes, 0) AS value FROM metric_samples WHERE recorded_at > NOW() - INTERVAL '15 minutes' ORDER BY node_id, recorded_at DESC"}
+            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (m.node_id) m.node_id, n.name AS node_name, 100.0 * m.memory_used_bytes / NULLIF(m.memory_total_bytes, 0) AS value FROM metric_samples m JOIN nodes n ON n.id = m.node_id WHERE m.recorded_at > NOW() - INTERVAL '15 minutes' ORDER BY m.node_id, m.recorded_at DESC"}
           - refId: B
             datasourceUid: __expr__
             relativeTimeRange: {from: 0, to: 0}
@@ -84,7 +85,7 @@ groups:
         noDataState: OK
         execErrState: Error
         for: 10m
-        annotations: {summary: "Memory usage on {{ $labels.node_id }} has exceeded 90 percent for 10 minutes."}
+        annotations: {summary: "Memory usage on {{ $labels.node_name }} has stayed above 90% for 10 minutes{{ with $values.B.Value }} (now {{ humanize . }}%){{ end }}."}
         labels: {severity: warning}
 
       - uid: vpsentinel-disk-warning
@@ -94,7 +95,7 @@ groups:
           - refId: A
             datasourceUid: vpsentinel-postgres
             relativeTimeRange: {from: 600, to: 0}
-            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (node_id) node_id, 100.0 * disk_used_bytes / NULLIF(disk_total_bytes, 0) AS value FROM metric_samples WHERE recorded_at > NOW() - INTERVAL '10 minutes' ORDER BY node_id, recorded_at DESC"}
+            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (m.node_id) m.node_id, n.name AS node_name, 100.0 * m.disk_used_bytes / NULLIF(m.disk_total_bytes, 0) AS value FROM metric_samples m JOIN nodes n ON n.id = m.node_id WHERE m.recorded_at > NOW() - INTERVAL '10 minutes' ORDER BY m.node_id, m.recorded_at DESC"}
           - refId: B
             datasourceUid: __expr__
             relativeTimeRange: {from: 0, to: 0}
@@ -106,7 +107,7 @@ groups:
         noDataState: OK
         execErrState: Error
         for: 5m
-        annotations: {summary: "Disk usage on {{ $labels.node_id }} has exceeded 80 percent for five minutes."}
+        annotations: {summary: "Disk usage on {{ $labels.node_name }} has stayed above 80% for 5 minutes{{ with $values.B.Value }} (now {{ humanize . }}%){{ end }}."}
         labels: {severity: warning}
 
       - uid: vpsentinel-disk-critical
@@ -116,7 +117,7 @@ groups:
           - refId: A
             datasourceUid: vpsentinel-postgres
             relativeTimeRange: {from: 600, to: 0}
-            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (node_id) node_id, 100.0 * disk_used_bytes / NULLIF(disk_total_bytes, 0) AS value FROM metric_samples WHERE recorded_at > NOW() - INTERVAL '10 minutes' ORDER BY node_id, recorded_at DESC"}
+            model: {datasource: {type: postgres, uid: vpsentinel-postgres}, editorMode: code, format: table, instant: true, rawQuery: true, rawSql: "SELECT DISTINCT ON (m.node_id) m.node_id, n.name AS node_name, 100.0 * m.disk_used_bytes / NULLIF(m.disk_total_bytes, 0) AS value FROM metric_samples m JOIN nodes n ON n.id = m.node_id WHERE m.recorded_at > NOW() - INTERVAL '10 minutes' ORDER BY m.node_id, m.recorded_at DESC"}
           - refId: B
             datasourceUid: __expr__
             relativeTimeRange: {from: 0, to: 0}
@@ -128,5 +129,5 @@ groups:
         noDataState: OK
         execErrState: Error
         for: 5m
-        annotations: {summary: "Disk usage on {{ $labels.node_id }} has exceeded 90 percent for five minutes."}
+        annotations: {summary: "Disk usage on {{ $labels.node_name }} has stayed above 90% for 5 minutes{{ with $values.B.Value }} (now {{ humanize . }}%){{ end }}."}
         labels: {severity: critical}
