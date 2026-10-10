@@ -1,8 +1,42 @@
-import { CheckCircle2, TriangleAlert } from 'lucide-react'
 import type { Alert } from '../../types'
-import { StatusBadge } from '../../components/ui/StatusBadge'
+import { elapsedSince, formatTimestamp, relativeTime } from '../../lib/format'
+import { severityTone, toneDot } from '../../lib/tone'
+import { AlertStateBadge, Pill } from '../../components/ui/StatusBadge'
 
-export function AlertRow({ alert }: { alert: Alert }) {
-  const Icon = alert.state === 'firing' ? TriangleAlert : CheckCircle2
-  return <article className="grid min-h-24 grid-cols-[36px_1fr_auto] items-center gap-4 border-b border-base-300 px-5 py-4 last:border-0"><span className={`grid size-9 place-items-center rounded-full ${alert.state === 'firing' ? 'bg-error/10 text-error' : 'bg-success/10 text-success'}`}><Icon size={17} /></span><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm">{alert.rule_name}</strong><span className={`badge badge-xs ${alert.severity === 'critical' ? 'badge-error' : 'badge-warning'}`}>{alert.severity}</span></div><p className="mt-1 truncate text-xs text-base-content/60">{alert.summary}</p><small className="font-mono text-[9px] text-base-content/35">{alert.node_id ?? 'Control plane'} · {new Date(alert.received_at).toLocaleString()}</small></div><StatusBadge status={alert.state === 'firing' ? 'offline' : 'online'} label={alert.state} /></article>
+type Props = {
+  alert: Alert
+  nodeName: (id: string | null) => string
+  // Active means this firing event has not been followed by a recovery yet.
+  active: boolean
+  compact?: boolean
+}
+
+function timing(alert: Alert, active: boolean) {
+  if (alert.state === 'resolved') return `resolved ${relativeTime(alert.received_at)}`
+  return active ? `for ${elapsedSince(alert.starts_at)}` : `fired ${relativeTime(alert.received_at)}`
+}
+
+export function AlertRow({ alert, nodeName, active, compact = false }: Props) {
+  const firing = alert.state === 'firing'
+  const tone = !firing ? 'success' : active ? severityTone(alert.severity) : 'neutral'
+
+  return (
+    <li className="flex gap-3 px-4 py-3 sm:px-5">
+      <span className={`mt-1.5 size-2 shrink-0 rounded-full ${toneDot[tone]}`} aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-sm font-medium">{alert.rule_name}</span>
+          <Pill tone={severityTone(alert.severity)}>{alert.severity}</Pill>
+        </div>
+        {!compact && <p className="mt-1 truncate text-sm text-base-content/65" title={alert.summary}>{alert.summary}</p>}
+        <p className="mt-1 text-xs text-base-content/50">
+          {nodeName(alert.node_id)} · started {formatTimestamp(alert.starts_at)}
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-1.5 text-xs tabular-nums text-base-content/55">
+        {!compact && <AlertStateBadge state={alert.state} active={active} />}
+        <span>{timing(alert, active)}</span>
+      </div>
+    </li>
+  )
 }

@@ -1,11 +1,19 @@
 <!doctype html>
-<html lang="en" data-theme="business">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Self-hosted Linux VPS monitoring and incident management." />
-    <meta name="theme-color" content="#181a1b" />
-    <title>VPSentinel Control Plane</title>
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>VPSentinel</title>
+    <script>
+      // Apply a stored theme before the first paint to avoid a light/dark flash.
+      try {
+        const theme = localStorage.getItem('vpsentinel-theme')
+        if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = `sentinel-${theme}`
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

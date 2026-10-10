@@ -4,9 +4,9 @@ type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
 
 const variants: Record<Variant, string> = {
   primary: 'btn-primary',
-  secondary: 'btn-outline border-base-300 bg-base-200',
+  secondary: 'border-base-300 bg-base-100 hover:bg-base-200',
   ghost: 'btn-ghost',
-  danger: 'btn-ghost text-error hover:bg-error/10',
+  danger: 'btn-error',
 }
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -16,5 +16,10 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 }
 
 export function Button({ variant = 'secondary', size = 'md', className = '', children, ...props }: Props) {
-  return <button className={`btn ${variants[variant]} ${size === 'sm' ? 'btn-sm' : ''} ${className}`} {...props}>{children}</button>
+  const sizing = size === 'sm' ? 'btn-sm' : ''
+  return (
+    <button className={`btn gap-2 font-medium shadow-none ${variants[variant]} ${sizing} ${className}`} {...props}>
+      {children}
+    </button>
+  )
 }

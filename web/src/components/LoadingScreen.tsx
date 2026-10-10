@@ -1,5 +1,10 @@
-import { Brand } from './Brand'
+import { BrandMark } from './Brand'
 
 export function LoadingScreen() {
-  return <main className="grid min-h-screen place-content-center justify-items-center gap-5"><Brand compact /><p className="font-mono text-[10px] tracking-[.2em] text-base-content/45">RESTORING SESSION</p><span className="loading loading-dots loading-md text-primary" /></main>
+  return (
+    <main className="grid min-h-screen place-content-center justify-items-center gap-4 bg-base-200">
+      <BrandMark className="size-10" />
+      <span className="loading loading-dots loading-sm text-base-content/40" aria-label="Restoring session" />
+    </main>
+  )
 }

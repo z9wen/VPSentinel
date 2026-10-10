@@ -1,12 +1,35 @@
-import type { NodeStatus } from '../../types'
+import { toneDot, toneSurface, type Tone } from '../../lib/tone'
+import type { Alert, NodeStatus } from '../../types'
 
-const tones: Record<NodeStatus, string> = {
-  online: 'badge-success',
-  degraded: 'badge-warning',
-  offline: 'badge-error',
-  pending: 'badge-ghost',
+export function Pill({ tone, children }: { tone: Tone; children: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${toneSurface[tone]}`}>
+      <span className={`size-1.5 rounded-full ${toneDot[tone]}`} />
+      {children}
+    </span>
+  )
 }
 
-export function StatusBadge({ status, label }: { status: NodeStatus; label?: string }) {
-  return <span className={`badge badge-sm gap-2 ${tones[status]}`}><span className="size-1.5 rounded-full bg-current" />{label ?? status}</span>
+const nodeTones: Record<NodeStatus, Tone> = {
+  online: 'success',
+  degraded: 'warning',
+  offline: 'error',
+  pending: 'neutral',
+}
+
+const nodeLabels: Record<NodeStatus, string> = {
+  online: 'Online',
+  degraded: 'Degraded',
+  offline: 'Offline',
+  pending: 'Pending',
+}
+
+export function StatusBadge({ status }: { status: NodeStatus }) {
+  return <Pill tone={nodeTones[status]}>{nodeLabels[status]}</Pill>
+}
+
+// A firing event that a later recovery superseded is history, not an open incident.
+export function AlertStateBadge({ state, active }: { state: Alert['state']; active: boolean }) {
+  if (state === 'resolved') return <Pill tone="success">Resolved</Pill>
+  return active ? <Pill tone="error">Firing</Pill> : <Pill tone="neutral">Fired</Pill>
 }

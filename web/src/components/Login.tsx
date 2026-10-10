@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { Activity, LockKeyhole, RadioTower } from 'lucide-react'
 import { request } from '../lib/api'
 import type { AccessResponse } from '../types'
 import { Brand } from './Brand'
@@ -26,12 +25,57 @@ export function Login({ onAuthenticated }: { onAuthenticated: (token: string) =>
     }
   }
 
-  return <main className="grid min-h-screen lg:grid-cols-[1.25fr_1fr]">
-    <section className="hidden flex-col justify-between border-r border-base-300 bg-gradient-to-br from-base-200 via-base-100 to-base-300 p-12 lg:flex xl:p-20">
-      <Brand />
-      <div className="max-w-4xl"><p className="mb-4 font-mono text-xs tracking-[.2em] text-primary">SELF-HOSTED FLEET OBSERVABILITY</p><h1 className="text-6xl font-semibold leading-[.95] tracking-[-.06em] xl:text-8xl">Know when your infrastructure changes state.</h1><p className="mt-7 max-w-2xl text-lg leading-8 text-base-content/60">Live Linux telemetry, actionable incidents, and recovery signals—without opening an inbound agent port.</p></div>
-      <div className="flex gap-7 text-xs text-base-content/50"><span className="flex items-center gap-2"><RadioTower size={14} className="text-primary" />HTTPS push agents</span><span className="flex items-center gap-2"><LockKeyhole size={14} className="text-primary" />Hashed node tokens</span><span className="flex items-center gap-2"><Activity size={14} className="text-primary" />30-day history</span></div>
-    </section>
-    <section className="grid place-items-center p-6"><form className="w-full max-w-sm space-y-5" onSubmit={submit}><div className="mb-10 lg:hidden"><Brand /></div><div><p className="font-mono text-[10px] tracking-[.2em] text-primary">OPERATOR ACCESS</p><h2 className="mt-2 text-3xl font-semibold tracking-tight">Sign in</h2><p className="mt-2 text-sm leading-6 text-base-content/55">Use the administrator credentials stored in the server environment.</p></div><label className="fieldset"><span className="fieldset-legend">Email</span><input className="input w-full" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required /></label><label className="fieldset"><span className="fieldset-legend">Password</span><input className="input w-full" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>{error && <div className="alert alert-error text-sm" role="alert">{error}</div>}<Button variant="primary" className="w-full" disabled={submitting}>{submitting ? <span className="loading loading-spinner loading-sm" /> : <LockKeyhole size={16} />}{submitting ? 'Authenticating…' : 'Open control plane'}</Button><p className="text-center font-mono text-[9px] text-base-content/40">Refresh sessions stay in an HttpOnly cookie.</p></form></section>
-  </main>
+  return (
+    <main className="grid min-h-screen place-items-center bg-base-200 px-4 py-12">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 flex justify-center">
+          <Brand />
+        </div>
+
+        <form className="rounded-box border border-base-300 bg-base-100 p-6 shadow-sm sm:p-8" onSubmit={submit}>
+          <h1 className="text-lg font-semibold">Sign in</h1>
+          <p className="mt-1 text-sm text-base-content/60">Use the administrator account configured on the server.</p>
+
+          <div className="mt-6 space-y-4">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium">Email</span>
+              <input
+                className="input w-full"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+                autoFocus
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium">Password</span>
+              <input
+                className="input w-full"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+            </label>
+          </div>
+
+          {error && (
+            <p className="mt-4 rounded-field border border-error/25 bg-error/10 px-3 py-2 text-sm" role="alert">
+              {error}
+            </p>
+          )}
+
+          <Button variant="primary" className="mt-6 w-full" disabled={submitting}>
+            {submitting && <span className="loading loading-spinner loading-xs" />}
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
+
+        <p className="mt-6 text-center text-xs text-base-content/50">Self-hosted monitoring for Linux VPS fleets</p>
+      </div>
+    </main>
+  )
 }

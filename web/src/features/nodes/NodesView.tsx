@@ -1,33 +1,107 @@
-import { Eye, KeyRound, Server, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import type { AuthedRequest, Node } from '../../types'
 import { relativeTime } from '../../lib/format'
 import { Button } from '../../components/ui/Button'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { OneTimeToken } from '../../components/ui/OneTimeToken'
+import { Panel } from '../../components/ui/Panel'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 
-type Props = { nodes: Node[]; authedRequest: AuthedRequest; onRefresh: () => Promise<void>; onSelect: (node: Node) => void }
+type Props = {
+  nodes: Node[]
+  authedRequest: AuthedRequest
+  onRefresh: () => Promise<void>
+  onSelect: (node: Node) => void
+  onAdd: () => void
+}
 
-export function NodesView({ nodes, authedRequest, onRefresh, onSelect }: Props) {
-  const [token, setToken] = useState('')
-  const [busy, setBusy] = useState('')
-
-  async function generate(node: Node) {
-    setBusy(node.id)
-    try {
-      const result = await authedRequest<{ token: string }>(`/api/v1/nodes/${node.id}/tokens`, { method: 'POST', body: JSON.stringify({ label: `web-${new Date().toISOString().slice(0, 10)}` }) })
-      setToken(result.token)
-    } finally {
-      setBusy('')
-    }
-  }
+export function NodesView({ nodes, authedRequest, onRefresh, onSelect, onAdd }: Props) {
+  const [deleting, setDeleting] = useState<Node | null>(null)
 
   async function remove(node: Node) {
-    if (!window.confirm(`Delete ${node.name} and all of its metrics?`)) return
     await authedRequest(`/api/v1/nodes/${node.id}`, { method: 'DELETE' })
     await onRefresh()
   }
 
-  return <div className="space-y-5">{token && <OneTimeToken token={token} onClose={() => setToken('')} />}{nodes.length === 0 ? <section className="rounded-box border border-base-300 bg-base-100"><EmptyState title="No nodes yet" text="Register the first VPS and install its agent." /></section> : <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">{nodes.map((node) => <article className="card border border-base-300 bg-base-100" key={node.id}><div className="card-body p-5"><div className="flex justify-between"><StatusBadge status={node.status} /><span className="font-mono text-[10px] text-base-content/35">{node.id.slice(0, 8)}</span></div><div className="mt-4"><h2 className="card-title text-lg"><Server size={17} className="text-primary" />{node.name}</h2><p className="text-xs text-base-content/45">{node.hostname || 'Waiting for first heartbeat'}</p></div><dl className="my-3 space-y-2 text-xs">{[['Environment', node.environment], ['Last seen', relativeTime(node.last_seen_at)], ['Version', node.agent_version]].map(([label, value]) => <div className="flex justify-between border-b border-base-300 pb-2" key={label}><dt className="text-base-content/40">{label}</dt><dd className="font-mono">{value}</dd></div>)}</dl><div className="card-actions mt-2"><Button size="sm" onClick={() => onSelect(node)}><Eye size={14} />Inspect</Button><Button size="sm" disabled={busy === node.id} onClick={() => void generate(node)}>{busy === node.id ? <span className="loading loading-spinner loading-xs" /> : <KeyRound size={14} />}New token</Button><Button variant="danger" size="sm" className="ml-auto btn-square" title="Delete node" onClick={() => void remove(node)}><Trash2 size={15} /></Button></div></div></article>)}</section>}</div>
+  if (nodes.length === 0) {
+    return (
+      <section className="rounded-box border border-base-300 bg-base-100">
+        <EmptyState
+          title="No nodes yet"
+          text="Register the first VPS, then install the agent with the token it receives."
+          action={
+            <Button size="sm" variant="primary" onClick={onAdd}>
+              <Plus size={14} />
+              Add node
+            </Button>
+          }
+        />
+      </section>
+    )
+  }
+
+  return (
+    <>
+      <Panel title={`${nodes.length} ${nodes.length === 1 ? 'node' : 'nodes'}`} description="Status bands: online ≤ 2 min, degraded ≤ 5 min, offline beyond that.">
+        <div className="overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr className="text-xs text-base-content/55">
+                <th className="font-medium">Node</th>
+                <th className="font-medium">Status</th>
+                <th className="font-medium">Last seen</th>
+                <th className="hidden font-medium md:table-cell">Environment</th>
+                <th className="hidden font-medium lg:table-cell">Agent</th>
+                <th><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {nodes.map((node) => (
+                <tr key={node.id} className="border-base-300">
+                  <td>
+                    <button type="button" className="text-left text-sm font-medium hover:underline" onClick={() => onSelect(node)}>
+                      {node.name}
+                    </button>
+                    <div className="font-mono text-xs text-base-content/50">{node.hostname || node.id}</div>
+                  </td>
+                  <td><StatusBadge status={node.status} /></td>
+                  <td className="whitespace-nowrap text-sm tabular-nums text-base-content/70">{relativeTime(node.last_seen_at)}</td>
+                  <td className="hidden text-sm text-base-content/70 md:table-cell">{node.environment}</td>
+                  <td className="hidden lg:table-cell">
+                    <div className="font-mono text-xs">{node.agent_version}</div>
+                    <div className="text-xs text-base-content/50">{[node.os_name, node.kernel_version].filter(Boolean).join(' · ') || '—'}</div>
+                  </td>
+                  <td>
+                    <div className="flex justify-end gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => onSelect(node)}>Inspect</Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="btn-square text-base-content/60 hover:text-error"
+                        onClick={() => setDeleting(node)}
+                        aria-label={`Delete ${node.name}`}
+                        title="Delete node"
+                      >
+                        <Trash2 size={15} />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title={`Delete ${deleting?.name ?? 'node'}?`}
+        description="This removes the node, its agent tokens, and all retained metrics. Any agent still running on the host will be rejected."
+        confirmLabel="Delete node"
+        onConfirm={() => (deleting ? remove(deleting) : Promise.resolve())}
+        onClose={() => setDeleting(null)}
+      />
+    </>
+  )
 }
