@@ -80,7 +80,10 @@ jobs:
             )
           done
 
-          sha256sum dist/vpsentinel-* > dist/checksums.txt
+          cp scripts/install-agent.sh deploy/systemd/vpsentinel-agent.service dist/
+          # Checksums use bare file names so `sha256sum --check` works in the
+          # directory where the installer downloads the assets.
+          (cd dist && sha256sum vpsentinel-* install-agent.sh > checksums.txt)
 
       - name: Create GitHub Release
         env:
@@ -98,6 +101,8 @@ jobs:
             dist/vpsentinel-agent-linux-arm64 \
             dist/vpsentinel-server-linux-amd64 \
             dist/vpsentinel-server-linux-arm64 \
+            dist/vpsentinel-agent.service \
+            dist/install-agent.sh \
             dist/checksums.txt \
             --target "$SOURCE_SHA" \
             --title "$RELEASE_TAG" \

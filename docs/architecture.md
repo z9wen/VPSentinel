@@ -27,15 +27,20 @@ flowchart LR
   authenticated `/grafana/` reverse-proxy path.
 - PostgreSQL, Grafana, and the Go API have no public container ports. Only the
   web proxy binds to loopback; host Nginx terminates public TLS.
+- Client addresses travel in `X-Real-IP`, which each proxy overwrites. The web
+  proxy accepts it only from loopback and private peers, and the API only from
+  the internal network, so rate limits (including 10 logins per minute per
+  client) apply per real client rather than per proxy.
 
 ## Reliability model
 
 Agents collect immediately and then every 15 seconds. A bounded queue preserves
 recent samples through temporary server failures, while exponential backoff
 with full jitter avoids a retry storm. Stable sample IDs and database unique
-constraints make retries idempotent. The server handles SIGTERM gracefully,
-uses versioned migrations guarded by an advisory lock, and deletes metrics
-older than the configured retention period once per day.
+constraints make retries idempotent. The server handles SIGTERM gracefully
+and deletes metrics older than the configured retention period once per day.
+Versioned migrations run as a separate one-shot `migrate` job, guarded by an
+advisory lock, before the API starts.
 
 ## Status semantics
 

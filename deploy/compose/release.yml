@@ -1,0 +1,10 @@
+# Runs published release images instead of building from source:
+#   docker compose -f docker-compose.yml -f deploy/compose/release.yml up -d --no-build
+# VPSENTINEL_VERSION is a GitHub release tag, for example v2026.07.25.1784976846.
+services:
+  migrate:
+    image: ghcr.io/z9wen/vpsentinel-server:${VPSENTINEL_VERSION:?Set VPSENTINEL_VERSION to a release tag}
+  server:
+    image: ghcr.io/z9wen/vpsentinel-server:${VPSENTINEL_VERSION:?Set VPSENTINEL_VERSION to a release tag}
+  web:
+    image: ghcr.io/z9wen/vpsentinel-web:${VPSENTINEL_VERSION:?Set VPSENTINEL_VERSION to a release tag}

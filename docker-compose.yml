@@ -1,3 +1,7 @@
+x-server-build: &server-build
+  context: .
+  dockerfile: server/Dockerfile
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -16,21 +20,40 @@ services:
       start_period: 10s
     networks: [backend]
 
+  # Migrations run as a one-shot job before the API starts, so a failed
+  # migration stops the rollout instead of crash-looping the API container.
+  migrate:
+    build: *server-build
+    image: vpsentinel-server:local
+    command: ["migrate"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      VPSENTINEL_DATABASE_URL: postgres://vpsentinel:${POSTGRES_PASSWORD}@postgres:5432/vpsentinel?sslmode=disable
+      VPSENTINEL_DATABASE_START_TIMEOUT: 60s
+    networks: [backend]
+
   server:
-    build:
-      context: .
-      dockerfile: server/Dockerfile
+    build: *server-build
+    image: vpsentinel-server:local
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       GIN_MODE: release
       VPSENTINEL_LISTEN_ADDRESS: :8080
       VPSENTINEL_AGENT_TOKEN: ${VPSENTINEL_AGENT_TOKEN:?VPSENTINEL_AGENT_TOKEN must be set in .env}
       VPSENTINEL_NODE_ID: ${VPSENTINEL_NODE_ID:-primary-monitor}
       VPSENTINEL_DATABASE_URL: postgres://vpsentinel:${POSTGRES_PASSWORD}@postgres:5432/vpsentinel?sslmode=disable
-      VPSENTINEL_AUTO_MIGRATE: "true"
+      VPSENTINEL_AUTO_MIGRATE: "false"
+      # The API is reachable only on the internal network, so any private peer
+      # is the bundled web proxy (or Grafana) and may supply X-Real-IP.
+      VPSENTINEL_TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
       VPSENTINEL_DATABASE_START_TIMEOUT: 60s
       VPSENTINEL_ADMIN_EMAIL: ${VPSENTINEL_ADMIN_EMAIL:?VPSENTINEL_ADMIN_EMAIL must be set in .env}
       VPSENTINEL_ADMIN_PASSWORD: ${VPSENTINEL_ADMIN_PASSWORD:?VPSENTINEL_ADMIN_PASSWORD must be set in .env}
@@ -85,6 +108,7 @@ services:
   web:
     build:
       context: web
+    image: vpsentinel-web:local
     restart: unless-stopped
     depends_on:
       server:
@@ -92,7 +116,9 @@ services:
       grafana:
         condition: service_healthy
     ports:
-      - "127.0.0.1:${VPSENTINEL_HTTP_PORT:-8080}:8080"
+      # Loopback by default: a host TLS proxy fronts it. Bind a private address
+      # only when agents reach the stack over a private network.
+      - "${VPSENTINEL_BIND_ADDRESS:-127.0.0.1}:${VPSENTINEL_HTTP_PORT:-8080}:8080"
     networks: [frontend, backend]
 
 volumes:
