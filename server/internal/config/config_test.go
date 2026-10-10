@@ -39,6 +39,57 @@ func TestLoadRequiresStrongDevelopmentToken(t *testing.T) {
 	}
 }
 
+func TestLoadParsesTrustedProxies(t *testing.T) {
+	cfg, err := load(testEnvironment(func(key string) string {
+		switch key {
+		case "VPSENTINEL_DATABASE_URL":
+			return "postgres://vpsentinel:test@localhost/vpsentinel"
+		case "VPSENTINEL_TRUSTED_PROXIES":
+			return " 172.16.0.0/12, 127.0.0.1 ,"
+		}
+		return ""
+	}))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(cfg.TrustedProxies) != 2 || cfg.TrustedProxies[0] != "172.16.0.0/12" || cfg.TrustedProxies[1] != "127.0.0.1" {
+		t.Fatalf("TrustedProxies = %q, want [172.16.0.0/12 127.0.0.1]", cfg.TrustedProxies)
+	}
+}
+
+func TestLoadRejectsInvalidTrustedProxy(t *testing.T) {
+	_, err := load(testEnvironment(func(key string) string {
+		switch key {
+		case "VPSENTINEL_DATABASE_URL":
+			return "postgres://vpsentinel:test@localhost/vpsentinel"
+		case "VPSENTINEL_TRUSTED_PROXIES":
+			return "web-proxy"
+		}
+		return ""
+	}))
+	if err == nil {
+		t.Fatal("load returned nil error, want trusted proxy validation error")
+	}
+}
+
+func TestLoadMigrationNeedsOnlyDatabaseSettings(t *testing.T) {
+	cfg, err := loadMigration(func(key string) string {
+		if key == "VPSENTINEL_DATABASE_URL" {
+			return "postgres://vpsentinel:test@localhost/vpsentinel"
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("loadMigration: %v", err)
+	}
+	if cfg.DatabaseStartTimeout != defaultDatabaseStartTimeout {
+		t.Fatalf("DatabaseStartTimeout = %s, want %s", cfg.DatabaseStartTimeout, defaultDatabaseStartTimeout)
+	}
+	if _, err := loadMigration(func(string) string { return "" }); err == nil {
+		t.Fatal("loadMigration returned nil error without a database URL")
+	}
+}
+
 func testEnvironment(override func(string) string) func(string) string {
 	return func(key string) string {
 		if value := override(key); value != "" {

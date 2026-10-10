@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime"
@@ -31,7 +32,14 @@ type Dependencies struct {
 	CookieSecure  bool
 	WebhookSecret string
 	GrafanaURL    string
+	// TrustedProxies are the peers allowed to supply the client address in
+	// X-Real-IP. Without them every client behind the bundled web proxy would
+	// share one address and one rate-limit budget.
+	TrustedProxies []string
 }
+
+// loginAttemptsPerMinute bounds online password guessing per client address.
+const loginAttemptsPerMinute = 10
 
 func NewRouter(dependencies Dependencies) *gin.Engine {
 	if dependencies.Authenticator == nil {
@@ -51,8 +59,13 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 	}
 
 	router := gin.New()
-	_ = router.SetTrustedProxies(nil)
-	router.Use(gin.Recovery(), securityHeaders(), cors(dependencies.AllowedOrigin), newRateLimiter(240, time.Minute).middleware(), requestLogger(dependencies.Logger))
+	// Only X-Real-IP is honoured: the bundled proxy overwrites it, whereas
+	// X-Forwarded-For is appended to and can carry client-supplied values.
+	router.RemoteIPHeaders = []string{"X-Real-IP"}
+	if err := router.SetTrustedProxies(dependencies.TrustedProxies); err != nil {
+		panic(fmt.Sprintf("api trusted proxies: %v", err))
+	}
+	router.Use(gin.Recovery(), securityHeaders(), cors(dependencies.AllowedOrigin), newRateLimiter(240, time.Minute).middleware(clientCredentialKey), requestLogger(dependencies.Logger))
 
 	router.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -73,7 +86,7 @@ func NewRouter(dependencies Dependencies) *gin.Engine {
 		router.POST("/api/v1/agent/heartbeat", dependencies.agentHeartbeat)
 	}
 	if dependencies.Management != nil && dependencies.Sessions != nil {
-		router.POST("/api/v1/auth/login", dependencies.login)
+		router.POST("/api/v1/auth/login", newRateLimiter(loginAttemptsPerMinute, time.Minute).middleware(clientIPKey), dependencies.login)
 		router.POST("/api/v1/auth/refresh", dependencies.refresh)
 		router.POST("/api/v1/auth/logout", dependencies.logout)
 		router.POST("/api/v1/integrations/grafana/webhook", dependencies.grafanaWebhook)
@@ -195,6 +208,7 @@ func requestLogger(logger *slog.Logger) gin.HandlerFunc {
 			"method", c.Request.Method,
 			"path", c.FullPath(),
 			"status", c.Writer.Status(),
+			"client_ip", c.ClientIP(),
 			"duration", time.Since(startedAt),
 		)
 	}

@@ -25,11 +25,21 @@ Required variables:
 
 Optional variables include `VPSENTINEL_ACCESS_TOKEN_TTL` (default `15m`),
 `VPSENTINEL_REFRESH_TOKEN_TTL` (default `168h`), `VPSENTINEL_RETENTION_DAYS`
-(default `30`), `VPSENTINEL_MAX_BODY_BYTES`, `VPSENTINEL_WEB_ORIGIN`, and
-`VPSENTINEL_COOKIE_SECURE`.
+(default `30`), `VPSENTINEL_MAX_BODY_BYTES`, `VPSENTINEL_WEB_ORIGIN`,
+`VPSENTINEL_COOKIE_SECURE`, `VPSENTINEL_AUTO_MIGRATE` (default `true`), and
+`VPSENTINEL_TRUSTED_PROXIES`: comma-separated IPs or CIDRs of reverse proxies
+whose `X-Real-IP` header names the client. It defaults to none, so a directly
+exposed server ignores the header.
+
+## Migrations
+
+`vpsentinel-server migrate` applies pending migrations and exits; it needs only
+`VPSENTINEL_DATABASE_URL`. Compose runs it as a one-shot job before the API and
+sets `VPSENTINEL_AUTO_MIGRATE=false`, so the API never migrates on startup.
 
 ```bash
 go test ./...
+go run ./cmd/vpsentinel-server migrate
 go run ./cmd/vpsentinel-server
 ```
 

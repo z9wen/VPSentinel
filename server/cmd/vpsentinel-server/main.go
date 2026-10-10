@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,13 +23,49 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	if err := run(logger); err != nil {
+	if err := run(os.Args[1:], logger); err != nil {
 		logger.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(logger *slog.Logger) error {
+func run(args []string, logger *slog.Logger) error {
+	switch {
+	case len(args) == 0:
+		return serve(logger)
+	case len(args) == 1 && args[0] == "migrate":
+		return migrate(logger)
+	default:
+		return fmt.Errorf("unexpected arguments %q; usage: vpsentinel-server [migrate]", strings.Join(args, " "))
+	}
+}
+
+// migrate applies pending schema migrations and exits. Deployments run it as a
+// one-shot job before starting (or upgrading) the API so a failed migration
+// blocks the rollout instead of crash-looping every API replica.
+func migrate(logger *slog.Logger) error {
+	cfg, err := config.LoadMigration()
+	if err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	connectCtx, cancel := context.WithTimeout(ctx, cfg.DatabaseStartTimeout)
+	defer cancel()
+	pool, err := database.Connect(connectCtx, cfg.DatabaseURL, logger)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if err := database.Migrate(ctx, pool, logger); err != nil {
+		return err
+	}
+	logger.Info("database migrations complete", "version", version.Version)
+	return nil
+}
+
+func serve(logger *slog.Logger) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -64,17 +102,18 @@ func run(logger *slog.Logger) error {
 	cancelDatabaseStartup()
 	sessions := auth.NewSessionManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	router := api.NewRouter(api.Dependencies{
-		Authenticator: auth.NewPostgres(pool),
-		Store:         store,
-		Management:    store,
-		Sessions:      sessions,
-		Logger:        logger,
-		Version:       version.Version,
-		MaxBodyBytes:  cfg.MaxBodyBytes,
-		AllowedOrigin: cfg.WebOrigin,
-		CookieSecure:  cfg.CookieSecure,
-		WebhookSecret: cfg.GrafanaWebhookSecret,
-		GrafanaURL:    cfg.GrafanaURL,
+		Authenticator:  auth.NewPostgres(pool),
+		Store:          store,
+		Management:     store,
+		Sessions:       sessions,
+		Logger:         logger,
+		Version:        version.Version,
+		MaxBodyBytes:   cfg.MaxBodyBytes,
+		AllowedOrigin:  cfg.WebOrigin,
+		CookieSecure:   cfg.CookieSecure,
+		WebhookSecret:  cfg.GrafanaWebhookSecret,
+		GrafanaURL:     cfg.GrafanaURL,
+		TrustedProxies: cfg.TrustedProxies,
 	})
 	go runRetention(ctx, store, logger, cfg.RetentionDays)
 
