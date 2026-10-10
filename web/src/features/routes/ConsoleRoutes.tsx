@@ -5,15 +5,31 @@ import { OverviewView } from '../overview/OverviewView'
 
 export function OverviewRoute() {
   const console = useConsole()
-  return <OverviewView nodes={console.nodes} alerts={console.alerts} activeAlerts={console.activeAlerts} onNode={console.selectNode} />
+  return (
+    <OverviewView
+      nodes={console.nodes}
+      alerts={console.alerts}
+      activeAlerts={console.activeAlerts}
+      nodeName={console.nodeName}
+      onNode={console.selectNode}
+    />
+  )
 }
 
 export function NodesRoute() {
   const console = useConsole()
-  return <NodesView nodes={console.nodes} authedRequest={console.authedRequest} onRefresh={console.refresh} onSelect={console.selectNode} />
+  return (
+    <NodesView
+      nodes={console.nodes}
+      authedRequest={console.authedRequest}
+      onRefresh={console.refresh}
+      onSelect={console.selectNode}
+      onAdd={console.addNode}
+    />
+  )
 }
 
 export function AlertsRoute() {
   const console = useConsole()
-  return <AlertsView alerts={console.alerts} />
+  return <AlertsView alerts={console.alerts} activeAlerts={console.activeAlerts} nodeName={console.nodeName} />
 }

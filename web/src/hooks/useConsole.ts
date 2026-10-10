@@ -5,9 +5,11 @@ export type ConsoleContextValue = {
   nodes: Node[]
   alerts: Alert[]
   activeAlerts: Alert[]
+  nodeName: (id: string | null) => string
   authedRequest: AuthedRequest
   refresh: () => Promise<void>
   selectNode: (node: Node) => void
+  addNode: () => void
 }
 
 export const ConsoleContext = createContext<ConsoleContextValue | null>(null)
